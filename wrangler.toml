@@ -1,0 +1,9 @@
+name = "group-view-dashboard-data-public"
+main = "./src/main.tsx"
+compatibility_date = "2024-08-01"
+[site]
+bucket = "./dist"  #  <- CHECK THIS PATH
+entry-point = "./" #  <- AND THIS PATH
+[vars]
+API_KEY = ""
+[compatibility_flags]
