@@ -1,4 +1,3 @@
-
 import { useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -31,24 +30,24 @@ const Dashboard = () => {
       title: "Total Patients", 
       value: totalUsers, 
       icon: Users, 
-      change: "+2.5%", 
-      trend: "up",
+      //change: "+2.5%", 
+      //trend: "up",
       onClick: () => navigate('/dashboard/patients')
     },
     { 
       title: "Total Nurses", 
       value: totalNurseCount, 
       icon: ClipboardList, 
-      change: "+1.2%", 
-      trend: "up",
+      //change: "+1.2%", 
+      //trend: "up",
       onClick: () => navigate('/dashboard/nurses') 
     },
     { 
       title: "Dehydrated Patients", 
       value: totalDehydrated, 
       icon: AlertTriangle, 
-      change: "-3.1%", 
-      trend: "down",
+      //change: "-3.1%", 
+      //trend: "down",
       onClick: () => navigate('/dashboard/patients?status=dehydrated') 
     },
   ];
@@ -57,7 +56,7 @@ const Dashboard = () => {
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Hydration Dashboard</h1>
+          <h1 className="text-3xl font-bold">Sponge Hydration Patient Dashboard</h1>
           {userGroup && (
             <div className="text-sm text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
               Group: {userGroup}

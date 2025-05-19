@@ -3,8 +3,10 @@ import { ReactNode, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
+import { SidebarNavItem as SidebarItemComponent } from "@/components/SidebarNavItem";
 import {
   LayoutDashboard,
+  ExternalLink,
   Users,
   LogOut,
   Menu,
@@ -16,6 +18,7 @@ type SidebarNavItem = {
   title: string;
   href: string;
   icon: React.ElementType;
+  external?: boolean; 
 };
 
 const sidebarNavItems: SidebarNavItem[] = [
@@ -33,6 +36,12 @@ const sidebarNavItems: SidebarNavItem[] = [
     title: "Nurses",
     href: "/dashboard/nurses",
     icon: ClipboardList,
+  },
+  {
+    title: "Buy More Products",
+    href: "https://www.spongehydration.com/products-1",
+    icon: ExternalLink,
+    external: true,
   },
 ];
 
@@ -73,16 +82,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         
         <div className="flex-1 py-6 px-3 space-y-1">
           {sidebarNavItems.map((item) => (
-            <Button
+            <SidebarItemComponent
               key={item.href}
-              variant="ghost"
-              size="sm"
-              className={`w-full justify-${sidebarOpen ? 'start' : 'center'} mb-1`}
-              onClick={() => navigate(item.href)}
-            >
-              <item.icon className={`h-5 w-5 ${!sidebarOpen && 'mx-auto'}`} />
-              {sidebarOpen && <span className="ml-3">{item.title}</span>}
-            </Button>
+              title={item.title}
+              href={item.href}
+              icon={item.icon}
+              external={(item as any).external} 
+              sidebarOpen={sidebarOpen}
+            />
           ))}
         </div>
 
