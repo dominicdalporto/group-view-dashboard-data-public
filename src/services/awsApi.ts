@@ -112,7 +112,7 @@ export class AwsApiService {
 
       const decryptedGroupData: GroupData = {};
 
-      for (const custId in encryptedGroupData) {
+      ffor (const custId in encryptedGroupData) {
         decryptedGroupData[custId] = {};
 
         for (const date in encryptedGroupData[custId]) {
@@ -120,11 +120,21 @@ export class AwsApiService {
 
           decryptedGroupData[custId][date] = await Promise.all(
             entries.map(async ([id, val]) => {
-              // Some values might already be numbers — skip decryption
-              if (typeof val === "number") return [id, val];
+              
+              // 1. Convert to string for consistent checks
+              const stringVal = val.toString(); 
 
-              const decrypted = await this.decryptServerSide(val.toString());
+              // 2. CHECK: If value is a number OR doesn't contain the custom separator
+              //    assume it's plain text and should be used as is.
+              if (typeof val === "number" || !stringVal.includes('^')) {
+                // If it was a number, return it as a number; otherwise, parse the string as a number
+                const num = parseFloat(stringVal);
+                return [id, isNaN(num) ? 0 : num];
+              }
 
+              // 3. ONLY DECIPHER VALUES THAT LOOK ENCRYPTED
+              const decrypted = await this.decryptServerSide(stringVal);
+              
               const num = parseFloat(decrypted);
               return [id, isNaN(num) ? 0 : num];
             })
