@@ -1,30 +1,24 @@
-import { json } from '@sveltejs/kit'; // or standard Response if using vanilla JS
-
-export async function onRequestPost({ request, env }) {
+export async function onRequest(context) {
   try {
-    const { encryptedData } = await request.json();
+    const { request, env } = context;
+    if (request.method !== "POST") {
+      return new Response("Method Not Allowed", { status: 405 });
+    }
+
+    const { data } = await request.json(); // encrypted data
     const key = env.encryption_key;
-    if (!key) throw new Error('Encryption key not set!');
+    if (!key) throw new Error("ENCRYPTION_KEY not set");
 
-    // Here, implement AES-GCM decryption using WebCrypto or Node crypto
-    const decryptedData = await decryptGroupData(encryptedData, key);
+    // Perform decryption here
+    const decrypted = myDecryptFunction(data, key);
 
-    return new Response(JSON.stringify({ success: true, data: decryptedData }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
+    return new Response(JSON.stringify({ success: true, decrypted }), {
+      headers: { "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error('Server decryption failed:', err);
     return new Response(JSON.stringify({ success: false, error: err.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { "Content-Type": "application/json" },
+      status: 200,
     });
   }
-}
-
-// Example decryption function (pseudo-code)
-async function decryptGroupData(encrypted, key) {
-  // Implement AES-GCM decryption logic here
-  // Return plain JS object
-  return encrypted; // placeholder
 }

@@ -85,16 +85,38 @@ export class AwsApiService {
   }
 
   // Get group data (encrypted), then decrypt server-side
-  async getGroupData(groupName: string): Promise<GroupData> {
-    try {
-      const params = { Type: "getgroupdata", GroupName: groupName };
-      const encryptedData = await this.makeRequest<GroupData>(params);
-      return await this.decryptGroupDataServerSide(encryptedData);
-    } catch (error) {
+  // In awsApi.ts
+async getGroupData(groupName: string): Promise<GroupData> {
+  try {
+    // Step 1: fetch encrypted data from your API
+    const params = { Type: 'getgroupdata', GroupName: groupName };
+    const encryptedData: GroupData = await this.makeRequest<GroupData>(params);
+
+    // Step 2: send encrypted data to your Cloudflare Pages decrypt function
+    const decryptResponse = await fetch("/@/functions/decrypt-group-data", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ data: encryptedData }),
+    });
+
+    const decryptJson = await decryptResponse.json();
+
+    if (!decryptJson.success) {
+      console.error("Decryption failed:", decryptJson.error);
+      return {}; // fallback to empty
+    }
+
+    // Step 3: return the decrypted data
+    return decryptJson.decrypted as GroupData;
+
+  } catch (error) {
       console.error("Failed to get group data:", error);
       return {};
     }
   }
+
 
   // Get nurses
   async getNurses(groupName: string): Promise<NursesData> {
