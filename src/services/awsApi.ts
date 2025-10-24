@@ -121,22 +121,31 @@ export class AwsApiService {
           decryptedGroupData[custId][date] = await Promise.all(
             entries.map(async ([id, val]) => {
               
-              // 1. Convert to string for consistent checks
+              // 1. CRITICAL CHECK: Handle null or undefined values first
+              if (val === null || val === undefined) {
+                  // If the value is missing, default to 0 and skip decryption
+                  return [id, 0];
+              }
+              
+              // Now it's safe to call toString()
               const stringVal = val.toString(); 
 
               // 2. CHECK: If value is a number OR doesn't contain the custom separator
-              //    assume it's plain text and should be used as is.
               if (typeof val === "number" || !stringVal.includes('^')) {
-                // If it was a number, return it as a number; otherwise, parse the string as a number
+                // If it was not encrypted, parse the string as a number
                 const num = parseFloat(stringVal);
                 return [id, isNaN(num) ? 0 : num];
               }
 
               // 3. ONLY DECIPHER VALUES THAT LOOK ENCRYPTED
-              const decrypted = await this.decryptServerSide(stringVal);
-              
-              const num = parseFloat(decrypted);
-              return [id, isNaN(num) ? 0 : num];
+              try {
+                  const decrypted = await this.decryptServerSide(stringVal);
+                  const num = parseFloat(decrypted);
+                  return [id, isNaN(num) ? 0 : num];
+              } catch (e) {
+                  console.error(`Decryption error for value: ${stringVal}`, e);
+                  return [id, 0]; // Default to 0 on decryption failure
+              }
             })
           );
         }
