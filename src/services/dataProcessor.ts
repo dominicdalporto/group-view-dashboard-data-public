@@ -17,23 +17,25 @@ export interface ProcessedUserData {
 }
 
 export class DataProcessor {
-  // Transform raw GroupData into dayData [custId -> [date, amount][]]
+  // Convert group data into per-user daily data
   static createDayData(groupData: GroupData): Record<string, [string, number][]> {
     const dayData: Record<string, [string, number][]> = {};
 
-    for (const [custId, dates] of Object.entries(groupData)) {
+    Object.entries(groupData).forEach(([custId, datesObj]) => {
       dayData[custId] = [];
-      for (const [date, values] of Object.entries(dates)) {
-        if (values && values.length > 0) {
-          dayData[custId].push([date, values[0][1]]); // already number
+
+      Object.entries(datesObj).forEach(([date, values]) => {
+        if (values && values.length > 0 && values[0]) {
+          const amount = parseFloat(values[0][1].toString());
+          dayData[custId].push([date, amount]);
         }
-      }
-    }
+      });
+    });
 
     return dayData;
   }
 
-  // Process user data into detailed stats
+  // Process user data with names, nurses, rooms
   static processUserData(
     groupData: GroupData,
     names: Record<string, string>,
@@ -43,42 +45,47 @@ export class DataProcessor {
     const dayData = this.createDayData(groupData);
     const processed: ProcessedUserData[] = [];
 
-    for (const [custId, userDates] of Object.entries(dayData)) {
+    Object.entries(dayData).forEach(([custId, userDates]) => {
       const dates: string[] = [];
       const ounces: number[] = [];
 
-      // Sort descending by date (most recent first)
+      // Sort descending by date
       userDates.sort((a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime());
 
-      userDates.forEach(([date, amt]) => {
+      userDates.forEach(([date, amount]) => {
         dates.push(date);
-        ounces.push(amt);
+        ounces.push(amount);
       });
 
-      const validOunces = ounces.filter(n => !isNaN(n));
-      const averageOunces = validOunces.length
-        ? validOunces.reduce((sum, n) => sum + n, 0) / validOunces.length
+      const validOunces = ounces.filter(oz => !isNaN(oz));
+      const averageOunces = validOunces.length > 0
+        ? validOunces.reduce((sum, oz) => sum + oz, 0) / validOunces.length
         : 0;
 
-      const todayOunces = ounces[0] ?? 0;
-      const threeDayOunces = ounces.slice(0, 3).reduce((sum, n) => sum + n, 0);
-      const sevenDayOunces = ounces.slice(0, 7).reduce((sum, n) => sum + n, 0);
-      const daysOver60oz = ounces.filter(n => n >= 60).length;
+      const todayOunces = ounces[0] || 0;
+      const threeDayOunces = ounces.slice(0, 3).reduce((sum, oz) => sum + oz, 0);
+      const sevenDayOunces = ounces.slice(0, 7).reduce((sum, oz) => sum + oz, 0);
+      const daysOver60oz = ounces.filter(oz => oz >= 60).length;
 
       let hydrationStatus: 'hydrated' | 'mild dehydration' | 'dehydrated';
       if (threeDayOunces < 40) hydrationStatus = 'dehydrated';
       else if (threeDayOunces < 120) hydrationStatus = 'mild dehydration';
       else hydrationStatus = 'hydrated';
 
-      // Assign nurse
-      const nurseVal = nurses[custId];
-      const nurse = Array.isArray(nurseVal) ? nurseVal[0] || 'Unassigned' :
-                    typeof nurseVal === 'string' ? nurseVal : 'Unassigned';
+      // Nurse and room assignment
+      const nurseValue = nurses[custId];
+      const nurse = Array.isArray(nurseValue)
+        ? nurseValue[0] || 'Unassigned'
+        : typeof nurseValue === 'string'
+          ? nurseValue
+          : 'Unassigned';
 
-      // Assign room
-      const roomVal = rooms[custId];
-      const room = Array.isArray(roomVal) ? roomVal[0] || 'Unassigned' :
-                  typeof roomVal === 'string' ? roomVal : 'Unassigned';
+      const roomValue = rooms[custId];
+      const room = Array.isArray(roomValue)
+        ? roomValue[0] || 'Unassigned'
+        : typeof roomValue === 'string'
+          ? roomValue
+          : 'Unassigned';
 
       processed.push({
         custId,
@@ -95,42 +102,68 @@ export class DataProcessor {
         daysOver60oz,
         hydrationStatus
       });
-    }
+    });
 
-    // Sort by 7-day ounces ascending (least hydrated first)
+    // Sort ascending by seven-day ounces (least hydrated first)
     return processed.sort((a, b) => a.sevenDayOunces - b.sevenDayOunces);
   }
 
-  // Create table-friendly format
+  // Filter user data for recent N days
+  static filterRecentDays(userData: ProcessedUserData[], days: number): ProcessedUserData[] {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+
+    return userData.map(user => {
+      const indices: number[] = [];
+      user.dates.forEach((dateStr, i) => {
+        if (new Date(dateStr) >= cutoff) indices.push(i);
+      });
+
+      return {
+        ...user,
+        dates: indices.map(i => user.dates[i]),
+        ounces: indices.map(i => user.ounces[i]),
+        averageOunces: indices.length
+          ? indices.reduce((sum, i) => sum + user.ounces[i], 0) / indices.length
+          : 0,
+        todayOunces: indices.length ? user.ounces[indices[0]] : 0,
+        threeDayOunces: indices.slice(0, 3).reduce((sum, i) => sum + user.ounces[i], 0),
+        sevenDayOunces: indices.slice(0, 7).reduce((sum, i) => sum + user.ounces[i], 0),
+      };
+    });
+  }
+
+  // Convert to table format
   static createTableData(userData: ProcessedUserData[]): Record<string, any[]> {
     const tables: Record<string, any[]> = {};
+
     userData.forEach(user => {
-      tables[user.custId] = user.dates.map((date, i) => ({
-        date: new Date(date).toISOString().split('T')[0],
-        ounces: parseFloat(user.ounces[i].toFixed(1))
-      })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      tables[user.custId] = user.dates
+        .map((date, i) => ({ date: new Date(date).toISOString().split('T')[0], ounces: parseFloat(user.ounces[i].toFixed(1)) }))
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     });
+
     return tables;
   }
 
-  // Count dehydrated patients
+  // Count dehydrated users
   static countDehydratedPatients(userData: ProcessedUserData[]): number {
     return userData.filter(u => u.hydrationStatus === 'dehydrated').length;
   }
 
-  // Count unique nurses
-  static countTotalNurses(nurses: NursesData): number {
-    return this.getAllNurses(nurses).length;
+  // Get all unique nurses
+  static getAllNurses(nurses: NursesData): string[] {
+    const set = new Set<string>();
+    Object.entries(nurses).forEach(([custId, value]) => {
+      if (custId === "status" || custId === "group") return;
+      if (Array.isArray(value)) value.forEach(n => n && set.add(n));
+      else if (typeof value === "string" && value) set.add(value);
+    });
+    return Array.from(set).sort();
   }
 
-  // Get sorted list of all unique nurses
-  static getAllNurses(nurses: NursesData): string[] {
-    const unique = new Set<string>();
-    for (const [custId, val] of Object.entries(nurses)) {
-      if (custId === 'status' || custId === 'group') continue;
-      if (Array.isArray(val)) val.forEach(n => n && unique.add(n));
-      else if (typeof val === 'string' && val) unique.add(val);
-    }
-    return Array.from(unique).sort();
+  // Count total unique nurses
+  static countTotalNurses(nurses: NursesData): number {
+    return this.getAllNurses(nurses).length;
   }
 }

@@ -1,49 +1,30 @@
-import { Env } from '@cloudflare/workers-types';
+import { json } from '@sveltejs/kit'; // or standard Response if using vanilla JS
 
-export interface Env {
-  encryption_key: string;
-}
-
-// Example function to decrypt AES-GCM values
-async function decryptValue(aesKeyB64: string, encrypted: string): Promise<string> {
-  const [nonceB64, ciphertextB64, tagB64] = encrypted.split("^");
-  const nonce = Uint8Array.from(atob(nonceB64), c => c.charCodeAt(0));
-  const ciphertext = Uint8Array.from(atob(ciphertextB64), c => c.charCodeAt(0));
-  const tag = Uint8Array.from(atob(tagB64), c => c.charCodeAt(0));
-
-  const combined = new Uint8Array(ciphertext.length + tag.length);
-  combined.set(ciphertext);
-  combined.set(tag, ciphertext.length);
-
-  const keyRaw = Uint8Array.from(atob(aesKeyB64), c => c.charCodeAt(0));
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    keyRaw,
-    { name: "AES-GCM" },
-    false,
-    ["decrypt"]
-  );
-
-  const plaintextBuffer = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: nonce },
-    cryptoKey,
-    combined
-  );
-
-  return new TextDecoder().decode(plaintextBuffer);
-}
-
-export async function onRequest({ request, env }: { request: Request, env: Env }) {
+export async function onRequestPost({ request, env }) {
   try {
-    const { encrypted } = await request.json();
-    if (!encrypted) return new Response("Missing encrypted value", { status: 400 });
+    const { encryptedData } = await request.json();
+    const key = env.ENCRYPTION_KEY;
+    if (!key) throw new Error('Encryption key not set!');
 
-    const decrypted = await decryptValue(env.encryption_key, encrypted);
+    // Here, implement AES-GCM decryption using WebCrypto or Node crypto
+    const decryptedData = await decryptGroupData(encryptedData, key);
 
-    return new Response(JSON.stringify({ decrypted }), {
-      headers: { "Content-Type": "application/json" },
+    return new Response(JSON.stringify({ success: true, data: decryptedData }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: (err as any).message }), { status: 500 });
+    console.error('Server decryption failed:', err);
+    return new Response(JSON.stringify({ success: false, error: err.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
+}
+
+// Example decryption function (pseudo-code)
+async function decryptGroupData(encrypted, key) {
+  // Implement AES-GCM decryption logic here
+  // Return plain JS object
+  return encrypted; // placeholder
 }

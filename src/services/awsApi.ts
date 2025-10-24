@@ -1,7 +1,6 @@
-// awsApi.ts
 import { toast } from "sonner";
 
-// AWS API Service
+// AWS API Service for interacting with your backend
 export interface GroupData {
   [custId: string]: {
     [date: string]: [string, number][];
@@ -33,15 +32,17 @@ export class AwsApiService {
     this.userId = userId;
   }
 
-  // Generic request method
+  // Generic request method to AWS API
   private async makeRequest<T>(params: Record<string, string>): Promise<T> {
     try {
       const queryParams = new URLSearchParams(params).toString();
       const response = await fetch(`${this.baseUrl}?${queryParams}`);
 
-      if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`API request failed with status ${response.status}`);
+      }
 
-      return await response.json() as T;
+      return (await response.json()) as T;
     } catch (error) {
       console.error("API request failed:", error);
       toast.error("Failed to fetch data from API");
@@ -49,22 +50,20 @@ export class AwsApiService {
     }
   }
 
-  // Server-side decryption
-  private async decryptServerSide(encrypted: string): Promise<string> {
+  // Call Cloudflare Pages function to decrypt group data server-side
+  private async decryptGroupDataServerSide(encryptedData: any): Promise<any> {
     try {
-      const res = await fetch("/@/functions/decrypt-group-data", {
+      const response = await fetch("/@/functions/decrypt-group-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ encrypted }),
+        body: JSON.stringify({ encryptedData })
       });
-
-      if (!res.ok) throw new Error("Server decryption failed");
-
-      const { decrypted } = await res.json();
-      return decrypted;
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error || "Server decryption failed");
+      return result.data;
     } catch (err) {
       console.error("Decryption failed:", err);
-      return encrypted; // fallback
+      throw err;
     }
   }
 
@@ -79,34 +78,20 @@ export class AwsApiService {
       const params = { Type: "getusergroup", CustID: this.userId };
       const response = await this.makeRequest<{ Groups: string[] }>(params);
       return response.Groups[0] || "";
-    } catch (err) {
-      console.error("Failed to get user group:", err);
+    } catch (error) {
+      console.error("Failed to get user group:", error);
       return "";
     }
   }
 
-  // Get group data and decrypt server-side
+  // Get group data (encrypted), then decrypt server-side
   async getGroupData(groupName: string): Promise<GroupData> {
     try {
       const params = { Type: "getgroupdata", GroupName: groupName };
-      const data = await this.makeRequest<GroupData>(params);
-
-      // decrypt each value using server-side function
-      const decryptedData: GroupData = {};
-      for (const custId in data) {
-        decryptedData[custId] = {};
-        for (const date in data[custId]) {
-          decryptedData[custId][date] = await Promise.all(
-            data[custId][date].map(async ([id, val]) => {
-              const decryptedVal = await this.decryptServerSide(val.toString());
-              return [id, parseFloat(decryptedVal)] as [string, number];
-            })
-          );
-        }
-      }
-      return decryptedData;
-    } catch (err) {
-      console.error("Failed to get group data:", err);
+      const encryptedData = await this.makeRequest<GroupData>(params);
+      return await this.decryptGroupDataServerSide(encryptedData);
+    } catch (error) {
+      console.error("Failed to get group data:", error);
       return {};
     }
   }
@@ -116,8 +101,8 @@ export class AwsApiService {
     try {
       const params = { Type: "getNurseByGroup", GroupName: groupName };
       return await this.makeRequest<NursesData>(params);
-    } catch (err) {
-      console.error("Failed to get nurses:", err);
+    } catch (error) {
+      console.error("Failed to get nurses:", error);
       return {};
     }
   }
@@ -127,8 +112,8 @@ export class AwsApiService {
     try {
       const params = { Type: "getRoomByGroup", GroupName: groupName };
       return await this.makeRequest<RoomsData>(params);
-    } catch (err) {
-      console.error("Failed to get rooms:", err);
+    } catch (error) {
+      console.error("Failed to get rooms:", error);
       return {};
     }
   }
@@ -138,11 +123,34 @@ export class AwsApiService {
     try {
       const params = { Type: "getNamesByGroup", GroupName: groupName };
       return await this.makeRequest<Record<string, string>>(params);
-    } catch (err) {
-      console.error("Failed to get names:", err);
+    } catch (error) {
+      console.error("Failed to get names:", error);
       return {};
     }
   }
+
+  // Create new customer ID
+  async newCustID(): Promise<string> {
+    try {
+      const params = { Type: "newcustid" };
+      return await this.makeRequest<string>(params);
+    } catch (error) {
+      console.error("Failed to get new customer ID:", error);
+      throw error;
+    }
+  }
+
+  // Create or update users/nurses
+  async createUser(params: Record<string, string>): Promise<any> {
+    return this.makeRequest(params);
+  }
+  async updateNurse(params: Record<string, string>): Promise<any> {
+    return this.makeRequest(params);
+  }
+  async updateUserNurse(params: Record<string, string>): Promise<any> {
+    return this.makeRequest(params);
+  }
 }
 
+// Export an instance of AwsApiService
 export const awsApi = new AwsApiService();
