@@ -3,7 +3,7 @@ import { json } from '@sveltejs/kit'; // or standard Response if using vanilla J
 export async function onRequestPost({ request, env }) {
   try {
     const { encryptedData } = await request.json();
-    const key = env.ENCRYPTION_KEY;
+    const key = env.encryption_key;
     if (!key) throw new Error('Encryption key not set!');
 
     // Here, implement AES-GCM decryption using WebCrypto or Node crypto
