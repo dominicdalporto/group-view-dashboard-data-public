@@ -1,24 +1,28 @@
 export async function onRequest(context) {
-  try {
-    const { request, env } = context;
-    if (request.method !== "POST") {
-      return new Response("Method Not Allowed", { status: 405 });
-    }
+  const { request, env } = context;
 
-    const { data } = await request.json(); // encrypted data
+  if (request.method !== "POST") {
+    return new Response("Method not allowed", { status: 405 });
+  }
+
+  try {
+    const body = await request.json();
+    const encryptedData = body.data;
+
+    // Example decryption using ENCRYPTION_KEY
     const key = env.encryption_key;
     if (!key) throw new Error("ENCRYPTION_KEY not set");
 
-    // Perform decryption here
-    const decrypted = myDecryptFunction(data, key);
+    // ...insert your decryption logic here, e.g., AES-GCM...
+    const decryptedData = decryptGroupData(encryptedData, key); 
 
-    return new Response(JSON.stringify({ success: true, decrypted }), {
+    return new Response(JSON.stringify({ success: true, decrypted: decryptedData }), {
       headers: { "Content-Type": "application/json" },
     });
   } catch (err) {
     return new Response(JSON.stringify({ success: false, error: err.message }), {
+      status: 500,
       headers: { "Content-Type": "application/json" },
-      status: 200,
     });
   }
 }
