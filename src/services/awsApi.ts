@@ -1,7 +1,6 @@
-// src/services/awsApi.ts
 import { toast } from "sonner";
 
-// Types for your data
+// AWS API Service types
 export interface GroupData {
   [custId: string]: {
     [date: string]: [string, number][];
@@ -21,35 +20,40 @@ export interface RoomsData {
 }
 
 export class AwsApiService {
-  private baseUrl = "https://ajtwnkl2yb.execute-api.us-east-2.amazonaws.com/test/sponge";
+  private baseUrl: string;
   private userId: string | null = null;
   private aesKeyB64: string;
 
   constructor(userId: string | null = null) {
+    this.baseUrl = "https://ajtwnkl2yb.execute-api.us-east-2.amazonaws.com/test/sponge";
     this.userId = userId;
-    // Cloudflare Pages secret
-    this.aesKeyB64 = process.env.encryption_key; // Ensure this is set in Pages environment
+
+    // Access Cloudflare Pages secret
+    this.aesKeyB64 = (globalThis as any).encryption_key || ""; 
+    if (!this.aesKeyB64) {
+      console.warn("encryption_key not set in environment!");
+    }
   }
 
   setUserId(userId: string | null) {
     this.userId = userId;
   }
 
-  // Base64 decoder for custom format
+  // Base64 decode helper for AES-GCM
   private customBase64Decode(data: string): Uint8Array {
-    const normalized = data.replace(/-/g, "+").replace(/_/g, "/").replace(/\$/g, "=").replace(/~/g, "&");
+    const normalized = data.replace(/-/g, "+").replace(/_/g, "/");
     const binary = atob(normalized);
-    return Uint8Array.from(binary, c => c.charCodeAt(0));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
   }
 
-  // AES-GCM decryption
-  public async decryptValue(encrypted: string): Promise<string> {
-    if (!encrypted || !encrypted.includes("^")) return encrypted;
-
+  // Decrypt AES-GCM string
+  async decryptValue(encrypted: string): Promise<string> {
     try {
       const [nonceB64, ciphertextB64, tagB64] = encrypted.split("^");
-      if (!nonceB64 || !ciphertextB64 || !tagB64) return encrypted;
-
       const nonce = this.customBase64Decode(nonceB64);
       const ciphertext = this.customBase64Decode(ciphertextB64);
       const tag = this.customBase64Decode(tagB64);
@@ -59,23 +63,29 @@ export class AwsApiService {
       combined.set(tag, ciphertext.length);
 
       const keyRaw = Uint8Array.from(atob(this.aesKeyB64), c => c.charCodeAt(0));
-      const cryptoKey = await crypto.subtle.importKey("raw", keyRaw, { name: "AES-GCM" }, false, ["decrypt"]);
+      const cryptoKey = await crypto.subtle.importKey(
+        "raw",
+        keyRaw,
+        { name: "AES-GCM" },
+        false,
+        ["decrypt"]
+      );
 
-      const decryptedBuffer = await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, cryptoKey, combined);
-      return new TextDecoder().decode(decryptedBuffer);
+      const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, cryptoKey, combined);
+      return new TextDecoder().decode(decrypted);
     } catch (err) {
       console.error("Decryption failed:", err);
       return encrypted;
     }
   }
 
-  // Generic API request
-  private async makeRequest<T>(params: Record<string, string>): Promise<T> {
+  // Generic request
+  async makeRequest<T>(params: Record<string, string>): Promise<T> {
     try {
       const query = new URLSearchParams(params).toString();
       const res = await fetch(`${this.baseUrl}?${query}`);
-      if (!res.ok) throw new Error(`API request failed with status ${res.status}`);
-      return await res.json() as T;
+      if (!res.ok) throw new Error(`API request failed: ${res.status}`);
+      return (await res.json()) as T;
     } catch (err) {
       console.error("API request failed:", err);
       toast.error("Failed to fetch data from API");
@@ -83,45 +93,76 @@ export class AwsApiService {
     }
   }
 
-  // Get group data and decrypt
-  public async getGroupData(groupName: string): Promise<GroupData> {
-    const rawData = await this.makeRequest<GroupData>({ Type: "getgroupdata", GroupName: groupName });
-    const decryptedData: GroupData = {};
-
-    for (const custId in rawData) {
-      decryptedData[custId] = {};
-      for (const date in rawData[custId]) {
-        decryptedData[custId][date] = await Promise.all(
-          rawData[custId][date].map(async ([id, val]) => [id, await this.decryptValue(val)] as [string, string])
-        );
-      }
+  // Get user group
+  async getUserGroup(): Promise<string> {
+    if (!this.userId) {
+      toast.error("User ID not set");
+      return "";
     }
+    try {
+      const res = await this.makeRequest<{ Groups: string[] }>({
+        Type: "getusergroup",
+        CustID: this.userId,
+      });
+      return res.Groups?.[0] || "";
+    } catch (err) {
+      console.error("Failed to fetch user group:", err);
+      return "";
+    }
+  }
 
-    return decryptedData;
+  // Get group data
+  async getGroupData(groupName: string): Promise<GroupData> {
+    try {
+      return await this.makeRequest<GroupData>({
+        Type: "getgroupdata",
+        GroupName: groupName,
+      });
+    } catch (err) {
+      console.error("Failed to fetch group data:", err);
+      return {};
+    }
   }
 
   // Get nurses
-  public async getNurses(groupName: string): Promise<NursesData> {
-    const rawData = await this.makeRequest<NursesData>({ Type: "getNurseByGroup", GroupName: groupName });
-    const decryptedData: NursesData = {} as NursesData;
-
-    for (const custId in rawData) {
-      const value = rawData[custId];
-      if (typeof value === "string") {
-        decryptedData[custId] = await this.decryptValue(value);
-      } else if (Array.isArray(value)) {
-        decryptedData[custId] = await Promise.all(value.map(v => this.decryptValue(v)));
-      }
+  async getNurses(groupName: string): Promise<NursesData> {
+    try {
+      return await this.makeRequest<NursesData>({
+        Type: "getNurseByGroup",
+        GroupName: groupName,
+      });
+    } catch (err) {
+      console.error("Failed to fetch nurses:", err);
+      return {};
     }
-
-    if (rawData.status) decryptedData.status = rawData.status;
-    if (rawData.group) decryptedData.group = rawData.group;
-
-    return decryptedData;
   }
 
-  // Similar getRooms and getNames methods can be added in the same simple pattern
+  // Get rooms
+  async getRooms(groupName: string): Promise<RoomsData> {
+    try {
+      return await this.makeRequest<RoomsData>({
+        Type: "getRoomByGroup",
+        GroupName: groupName,
+      });
+    } catch (err) {
+      console.error("Failed to fetch rooms:", err);
+      return {};
+    }
+  }
+
+  // Get names
+  async getNames(groupName: string): Promise<Record<string, string>> {
+    try {
+      return await this.makeRequest<Record<string, string>>({
+        Type: "getNamesByGroup",
+        GroupName: groupName,
+      });
+    } catch (err) {
+      console.error("Failed to fetch names:", err);
+      return {};
+    }
+  }
 }
 
-// Usage
+// Export a single instance for use across your app
 export const awsApi = new AwsApiService();
