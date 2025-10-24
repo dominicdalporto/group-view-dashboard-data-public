@@ -28,7 +28,7 @@ export class AwsApiService {
     this.userId = userId;
 
     // Server-side Pages function endpoint
-    this.decryptEndpoint = "/.netlify/functions/decrypt-group-data"; // update for your Pages function path
+    this.decryptEndpoint = "@/functions/decrypt-group-data"; //fixed
   }
 
   setUserId(userId: string | null) {
