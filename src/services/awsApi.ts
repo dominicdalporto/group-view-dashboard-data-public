@@ -112,7 +112,7 @@ export class AwsApiService {
 
       const decryptedGroupData: GroupData = {};
 
-      ffor (const custId in encryptedGroupData) {
+      for (const custId in encryptedGroupData) {
         decryptedGroupData[custId] = {};
 
         for (const date in encryptedGroupData[custId]) {
