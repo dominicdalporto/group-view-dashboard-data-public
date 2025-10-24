@@ -37,7 +37,7 @@ export class AwsApiService {
   // -------------------------------
   private async decryptServerSide(encryptedValue: string): Promise<string> {
     try {
-      const res = await fetch("/@/functions/decrypt-group-data", {
+      const res = await fetch("/decrypt-group-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ data: encryptedValue }),
