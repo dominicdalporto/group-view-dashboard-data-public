@@ -67,9 +67,13 @@ export class AwsApiService {
   // Group data with server decryption (Rewritten for Batching)
   // -------------------------------
   async getGroupData(groupName: string): Promise<GroupData> {
+    console.log("--- DEBUG: 1. getGroupData STARTED ---");
+    console.log("Group Name:", groupName);
     try {
       const params = { Type: "getgroupdata", GroupName: groupName };
+      console.log("--- DEBUG: 2. Calling makeRequest to AWS API ---");
       const encryptedGroupData = await this.makeRequest<GroupData>(params);
+      console.log("--- DEBUG: 3. makeRequest SUCCEEDED ---");
 
       // --- BATCHING SETUP ---
       const batchMap = new Map<number, { path: string[], originalValue: string }>();
@@ -146,6 +150,7 @@ export class AwsApiService {
 
       return finalGroupData;
     } catch (error) {
+      console.error("--- DEBUG: getGroupData CRASHED ---", error);
       console.error("Failed to get group data:", error);
       toast.error("Failed to get group data");
       return {};
