@@ -191,37 +191,80 @@ export class AwsApiService {
   // Other endpoints (Fully Implemented)
   // -------------------------------
   async getUserGroup(): Promise<string> {
-    const params = { Type: "getusergroup", UserID: this.userId || "" };
-    // Assuming API returns { group: "GroupX" }
-    const result = await this.makeRequest<{ group: string }>(params);
-    return result.group;
+    if (!this.userId) {
+      toast.error("User ID not set");
+      return "";
+    }
+
+    try {
+      const params = { Type: 'getusergroup', CustID: this.userId };
+      const response = await this.makeRequest<{ Groups: string[] }>(params);
+      return response.Groups[0] || "";
+    } catch (error) {
+      console.error("Failed to get user group:", error);
+      return "";
+    }
   }
   async getNurses(groupName: string): Promise<NursesData> {
-    const params = { Type: "getnurses", GroupName: groupName };
-    return this.makeRequest<NursesData>(params);
+    try {
+      const params = { Type: 'getNurseByGroup', GroupName: groupName };
+      return await this.makeRequest<NursesData>(params);
+    } catch (error) {
+      console.error("Failed to get nurses:", error);
+      return {};
+    }
   }
   async getRooms(groupName: string): Promise<RoomsData> {
-    const params = { Type: "getrooms", GroupName: groupName };
-    return this.makeRequest<RoomsData>(params);
+    try {
+      const params = { Type: 'getRoomByGroup', GroupName: groupName };
+      return await this.makeRequest<RoomsData>(params);
+    } catch (error) {
+      console.error("Failed to get rooms:", error);
+      return {};
+    }
   }
   async getNames(groupName: string): Promise<Record<string, string>> {
-    const params = { Type: "getnames", GroupName: groupName };
-    return this.makeRequest<Record<string, string>>(params);
+    try {
+      const params = { Type: 'getNamesByGroup', GroupName: groupName };
+      return await this.makeRequest<Record<string, string>>(params);
+    } catch (error) {
+      console.error("Failed to get names:", error);
+      return {};
+    }
   }
   async newCustID(): Promise<string> {
-    const params = { Type: "newcustid" };
-    const result = await this.makeRequest<{ custID: string }>(params);
-    return result.custID;
+    try {
+      const params = { Type: 'newcustid' };
+      return await this.makeRequest<string>(params);
+    } catch (error) {
+      console.error("Failed to get new customer ID:", error);
+      throw error;
+    }
   }
   async createUser(params: Record<string, string>): Promise<any> {
-    return this.makeRequest<any>({ ...params, Type: "createuser" });
+    try {
+      return await this.makeRequest(params);
+    } catch (error) {
+      console.error("Failed to create user:", error);
+      throw error;
+    }
   }
   async updateNurse(params: Record<string, string>): Promise<any> {
-    return this.makeRequest<any>({ ...params, Type: "updatenurse" });
+    try {
+      return await this.makeRequest(params);
+    } catch (error) {
+      console.error("Failed to update nurse:", error);
+      throw error;
+    }
   }
   async updateUserNurse(params: Record<string, string>): Promise<any> {
-    return this.makeRequest<any>({ ...params, Type: "updateusernurse" });
-  }
+    try {
+      return await this.makeRequest(params);
+    } catch (error) {
+      console.error("Failed to update user nurse:", error);
+      throw error;
+    }
+  } 
 }
 
 // ✅ Initialize API service
