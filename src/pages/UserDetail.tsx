@@ -21,7 +21,7 @@ import { patientService } from "@/services/patientService";
 const updateRoomSchema = z.object({
   room: z.string().min(1, "Room is required"),
 });
-
+//oops
 const updateNurseSchema = z.object({
   nurse: z.string().min(1, "Nurse is required"),
 });
