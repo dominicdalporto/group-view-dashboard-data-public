@@ -49,10 +49,22 @@ export interface NurseData {
   }[];
 }
 
+/**
+ * Utility to force a date string (YYYY-MM-DD) to be interpreted as
+ * UTC midnight, preventing local time zone shifts.
+ */
+function toUTCDate(dateStr: string): Date {
+  if (dateStr.includes('T')) {
+    return new Date(dateStr);
+  }
+  return new Date(`${dateStr}T00:00:00.000Z`);
+}
+
+
 export function useAwsData() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [userGroup, setUserGroup] = useState<string>("");
+  const [userGroup, setUserGroup] = useState<string>(""); // Using "" is fine if your logic handles it
   const [groupData, setGroupData] = useState<GroupData>({});
   const [nurses, setNurses] = useState<NursesData>({});
   const [rooms, setRooms] = useState<RoomsData>({});
@@ -94,18 +106,26 @@ export function useAwsData() {
       const allNursesList = DataProcessor.getAllNurses(newNurses);
   
       const newUsers: UserData[] = processedData.map(user => {
+        
+        // ✅ TIME ZONE FIX APPLIED HERE
         const activityData = user.dates.map((date, index) => ({
           date,
           value: user.ounces[index],
-        })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        }))
+        // Sort by UTC timestamp to prevent time zone shifts
+        .sort((a, b) => toUTCDate(b.date).getTime() - toUTCDate(a.date).getTime());
   
+        // Because the sort is now correct, the join/lastActive dates will be correct
+        const joinDate = activityData[activityData.length - 1]?.date || new Date().toISOString().split("T")[0];
+        const lastActive = activityData[0]?.date || new Date().toISOString().split("T")[0];
+
         return {
           id: user.custId,
           name: user.name,
           email: `${user.name.toLowerCase().replace(/\s+/g, ".")}@example.com`,
           group: userGroup,
-          joinDate: activityData[0]?.date || new Date().toISOString().split("T")[0],
-          lastActive: activityData[activityData.length - 1]?.date || new Date().toISOString().split("T")[0],
+          joinDate: joinDate,
+          lastActive: lastActive,
           status: user.hydrationStatus,
           nursesAssigned: Array.isArray(newNurses[user.custId])
             ? newNurses[user.custId] as string[]
