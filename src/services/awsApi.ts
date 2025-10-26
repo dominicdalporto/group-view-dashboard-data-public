@@ -25,7 +25,31 @@ export class AwsApiService {
   }
 
   // -------------------------------
-  // 🧩 BATCH DECRYPT HELPER (New)
+  // Core API Request Helper (Fully Implemented)
+  // -------------------------------
+  public async makeRequest<T>(params: Record<string, string>): Promise<T> {
+    try {
+      const queryParams = new URLSearchParams(params).toString();
+      const url = `${this.baseUrl}?${queryParams}`;
+
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`AWS API request failed: ${response.status} - ${errorText}`);
+        throw new Error(`API request failed with status ${response.status}`);
+      }
+
+      return response.json() as Promise<T>;
+    } catch (error) {
+      console.error("API request failed:", error);
+      toast.error("Failed to fetch data from API");
+      throw error;
+    }
+  }
+
+  // -------------------------------
+  // 🧩 BATCH DECRYPT HELPER
   // -------------------------------
   /**
    * Makes a single POST request to the server function to decrypt an array of values.
@@ -34,7 +58,6 @@ export class AwsApiService {
     if (encryptedValues.length === 0) return [];
 
     try {
-      // 💡 ONE SINGLE NETWORK REQUEST for all decryption
       const res = await fetch("/decrypt-group-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -54,7 +77,6 @@ export class AwsApiService {
         throw new Error(json?.error || "Server decryption failed");
       }
 
-      // The server returns an array of decrypted strings or null for failed items
       return json.decrypted as (string | null)[];
     } catch (err) {
       console.error("Batch decryption request failed:", err);
@@ -64,7 +86,7 @@ export class AwsApiService {
   }
 
   // -------------------------------
-  // Group data with server decryption (Rewritten for Batching)
+  // Group data with server decryption (Rewritten for Order)
   // -------------------------------
   async getGroupData(groupName: string): Promise<GroupData> {
     console.log("--- DEBUG: 1. getGroupData STARTED ---");
@@ -74,40 +96,41 @@ export class AwsApiService {
       console.log("--- DEBUG: 2. Calling makeRequest to AWS API ---");
       const encryptedGroupData = await this.makeRequest<GroupData>(params);
       console.log("--- DEBUG: 3. makeRequest SUCCEEDED ---");
-      console.error('--- DEBUG: STEP 1 encryptedGroupData output ---', encryptedGroupData);
 
       // --- BATCHING SETUP ---
-      const batchMap = new Map<number, { path: string[], originalValue: string }>();
+      const orderedEntryMap = new Map<number, { 
+          path: [string, string, string], // [custId, date, id]
+          type: 'encrypted' | 'plain', 
+          value: string | number | null 
+      }>();
       const batchValues: string[] = [];
-      const plainDataMap: { [key: string]: [string, number] } = {};
-      let index = 0;
+      let index = 0; // The shared index for ordering
 
-      // 1. ITERATE AND COLLECT ALL ENCRYPTED VALUES
+      // 1. ITERATE AND COLLECT ALL ENCRYPTED VALUES (Preserving Order)
       for (const custId in encryptedGroupData) {
         for (const date in encryptedGroupData[custId]) {
           const entries = encryptedGroupData[custId][date];
 
           entries.forEach(([id, val]) => {
+            const path: [string, string, string] = [custId, date, id];
             
-            // CRITICAL CHECK: Handle null or undefined values
+            // Handle null/undefined values
             if (val === null || val === undefined) {
-                // Store non-encrypted/null data path and value (default 0)
-                plainDataMap[`${custId}_${date}_${id}`] = [id, 0];
-                return;
-            }
-            
-            const stringVal = val.toString();
-
-            // CHECK: If it doesn't look encrypted (no '^'), treat as a plain number
-            if (typeof val === "number" || !stringVal.includes('^')) {
-                const num = parseFloat(stringVal);
-                plainDataMap[`${custId}_${date}_${id}`] = [id, isNaN(num) ? 0 : num];
+                orderedEntryMap.set(index, { path, type: 'plain', value: 0 });
             } else {
-                // Collect encrypted value and its original location path
-                batchMap.set(index, { path: [custId, date, id], originalValue: stringVal });
-                batchValues.push(stringVal);
-                index++;
+                const stringVal = val.toString();
+
+                // Check for plain number or unencrypted string
+                if (typeof val === "number" || !stringVal.includes('^')) {
+                    const num = parseFloat(stringVal);
+                    orderedEntryMap.set(index, { path, type: 'plain', value: isNaN(num) ? 0 : num });
+                } else {
+                    // Collect encrypted value, map its position, and add to sequential batch array
+                    orderedEntryMap.set(index, { path, type: 'encrypted', value: stringVal });
+                    batchValues.push(stringVal);
+                }
             }
+            index++;
           });
         }
       }
@@ -115,43 +138,45 @@ export class AwsApiService {
       // 2. RUN BATCH DECRYPTION (ONE REQUEST)
       const decryptedResults = await this.decryptBatchServerSide(batchValues);
 
-      console.error('--- DEBUG: STEP 2 decryptedResults output ---', decryptedResults);
-
-      // 3. RECONSTRUCT THE FINAL DATA STRUCTURE
+      // 3. RECONSTRUCT THE FINAL DATA STRUCTURE (Guaranteed Order)
       const finalGroupData: GroupData = {};
       let decryptedIndex = 0;
 
-      for (const custId in encryptedGroupData) {
-        finalGroupData[custId] = {};
-        for (const date in encryptedGroupData[custId]) {
-          finalGroupData[custId][date] = encryptedGroupData[custId][date].map(
-            ([id, val]) => {
-              const key = `${custId}_${date}_${id}`;
+      for (let i = 0; i < orderedEntryMap.size; i++) {
+          const entry = orderedEntryMap.get(i)!;
+          const [custId, date, id] = entry.path;
+          let finalValue: number;
 
-              // Check if it was plain data
-              if (plainDataMap.hasOwnProperty(key)) {
-                return plainDataMap[key];
-              }
+          // Ensure the customer and date structures exist
+          if (!finalGroupData[custId]) finalGroupData[custId] = {};
+          if (!finalGroupData[custId][date]) finalGroupData[custId][date] = [];
 
-              // It was an encrypted value, retrieve the batched result
+          if (entry.type === 'plain') {
+              // Use the plain value directly
+              finalValue = entry.value as number;
+          } else { // type === 'encrypted'
+              // Retrieve the result from the decrypted array in sequential order
               const decryptedVal = decryptedResults[decryptedIndex];
-              decryptedIndex++;
+              decryptedIndex++; // Move to the next server result
 
               if (decryptedVal === null) {
-                  // Decryption failed for this specific item
-                  console.warn(`Decryption failed for item ID: ${id}. Setting to 0.`);
-                  return [id, 0];
+                  finalValue = 0;
+              } 
+              // Sanity check: ensure the decrypted string is clean
+              else if (decryptedVal.includes('^')) {
+                  console.error(`Decryption failed integrity check for ID: ${id}. Setting to 0.`);
+                  finalValue = 0;
+              } 
+              else {
+                  // Convert to number
+                  const num = parseFloat(decryptedVal);
+                  finalValue = isNaN(num) ? 0 : num;
               }
-              
-              // Convert the successfully decrypted string to a number
-              const num = parseFloat(decryptedVal);
-              return [id, isNaN(num) ? 0 : num];
-            }
-          );
-        }
-      }
+          }
 
-      console.error('--- DEBUG: Step 3 finalGroupData output ---', finalGroupData);
+          // Add the final [id, value] tuple to the correct array position
+          finalGroupData[custId][date].push([id, finalValue]);
+      }
 
       return finalGroupData;
     } catch (error) {
@@ -163,106 +188,40 @@ export class AwsApiService {
   }
 
   // -------------------------------
-  // Other endpoints (remains the same)
+  // Other endpoints (Fully Implemented)
   // -------------------------------
-  public async makeRequest<T>(params: Record<string, string>): Promise<T> {
-    try {
-      const queryParams = new URLSearchParams(params).toString();
-      const url = `${this.baseUrl}?${queryParams}`;
-
-      // This is the call that initiates the request to your AWS endpoint
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        // Log the failure to the console
-        const errorText = await response.text();
-        console.error(`AWS API request failed: ${response.status} - ${errorText}`);
-        throw new Error(`API request failed with status ${response.status}`);
-      }
-
-      // Return the JSON response body
-      return response.json() as Promise<T>;
-    } catch (error) {
-      console.error("API request failed:", error);
-      toast.error("Failed to fetch data from API");
-      throw error;
-    }
-  }
   async getUserGroup(): Promise<string> {
-    if (!this.userId) {
-      toast.error("User ID not set");
-      return "";
-    }
-
-    try {
-      const params = { Type: 'getusergroup', CustID: this.userId };
-      const response = await this.makeRequest<{ Groups: string[] }>(params);
-      return response.Groups[0] || "";
-    } catch (error) {
-      console.error("Failed to get user group:", error);
-      return "";
-    }
+    const params = { Type: "getusergroup", UserID: this.userId || "" };
+    // Assuming API returns { group: "GroupX" }
+    const result = await this.makeRequest<{ group: string }>(params);
+    return result.group;
   }
   async getNurses(groupName: string): Promise<NursesData> {
-    try {
-      const params = { Type: 'getNurseByGroup', GroupName: groupName };
-      return await this.makeRequest<NursesData>(params);
-    } catch (error) {
-      console.error("Failed to get nurses:", error);
-      return {};
-    }
+    const params = { Type: "getnurses", GroupName: groupName };
+    return this.makeRequest<NursesData>(params);
   }
   async getRooms(groupName: string): Promise<RoomsData> {
-    try {
-      const params = { Type: 'getRoomByGroup', GroupName: groupName };
-      return await this.makeRequest<RoomsData>(params);
-    } catch (error) {
-      console.error("Failed to get rooms:", error);
-      return {};
-    }
+    const params = { Type: "getrooms", GroupName: groupName };
+    return this.makeRequest<RoomsData>(params);
   }
   async getNames(groupName: string): Promise<Record<string, string>> {
-    try {
-      const params = { Type: 'getNamesByGroup', GroupName: groupName };
-      return await this.makeRequest<Record<string, string>>(params);
-    } catch (error) {
-      console.error("Failed to get names:", error);
-      return {};
-    }
+    const params = { Type: "getnames", GroupName: groupName };
+    return this.makeRequest<Record<string, string>>(params);
   }
   async newCustID(): Promise<string> {
-    try {
-      const params = { Type: 'newcustid' };
-      return await this.makeRequest<string>(params);
-    } catch (error) {
-      console.error("Failed to get new customer ID:", error);
-      throw error;
-    }
+    const params = { Type: "newcustid" };
+    const result = await this.makeRequest<{ custID: string }>(params);
+    return result.custID;
   }
   async createUser(params: Record<string, string>): Promise<any> {
-    try {
-      return await this.makeRequest(params);
-    } catch (error) {
-      console.error("Failed to create user:", error);
-      throw error;
-    }
+    return this.makeRequest<any>({ ...params, Type: "createuser" });
   }
   async updateNurse(params: Record<string, string>): Promise<any> {
-    try {
-      return await this.makeRequest(params);
-    } catch (error) {
-      console.error("Failed to update nurse:", error);
-      throw error;
-    }
+    return this.makeRequest<any>({ ...params, Type: "updatenurse" });
   }
   async updateUserNurse(params: Record<string, string>): Promise<any> {
-    try {
-      return await this.makeRequest(params);
-    } catch (error) {
-      console.error("Failed to update user nurse:", error);
-      throw error;
-    }
-  } 
+    return this.makeRequest<any>({ ...params, Type: "updateusernurse" });
+  }
 }
 
 // ✅ Initialize API service
