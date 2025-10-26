@@ -257,7 +257,7 @@ export class AwsApiService {
       console.error("Failed to update user nurse:", error);
       throw error;
     }
-  }
+  } 
 }
 
 // ✅ Initialize API service
