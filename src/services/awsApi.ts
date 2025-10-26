@@ -144,12 +144,21 @@ export class AwsApiService {
 
       for (let i = 0; i < orderedEntryMap.size; i++) {
           const entry = orderedEntryMap.get(i)!;
-          const [custId, date, id] = entry.path;
+          
+          // --- UTC TIME ZONE FIX APPLIED HERE ---
+          // 1. Get the original date string (e.g., "2025-03-08")
+          const [custId, dateStr, id] = entry.path;
+          
+          // 2. Create a UTC-safe key (e.g., "2025-03-08T00:00:00.000Z")
+          // This forces downstream code to interpret the date as UTC, not local.
+          const utcDateKey = `${dateStr}T00:00:00.000Z`;
+          // --- END FIX ---
+          
           let finalValue: number;
 
-          // Ensure the customer and date structures exist
+          // Ensure the customer and date structures exist using the NEW UTC key
           if (!finalGroupData[custId]) finalGroupData[custId] = {};
-          if (!finalGroupData[custId][date]) finalGroupData[custId][date] = [];
+          if (!finalGroupData[custId][utcDateKey]) finalGroupData[custId][utcDateKey] = [];
 
           if (entry.type === 'plain') {
               // Use the plain value directly
@@ -175,7 +184,7 @@ export class AwsApiService {
           }
 
           // Add the final [id, value] tuple to the correct array position
-          finalGroupData[custId][date].push([id, finalValue]);
+          finalGroupData[custId][utcDateKey].push([id, finalValue]);
       }
 
       return finalGroupData;
