@@ -74,6 +74,7 @@ export class AwsApiService {
       console.log("--- DEBUG: 2. Calling makeRequest to AWS API ---");
       const encryptedGroupData = await this.makeRequest<GroupData>(params);
       console.log("--- DEBUG: 3. makeRequest SUCCEEDED ---");
+      console.error('--- DEBUG: STEP 1 encryptedGroupData output ---', encryptedGroupData);
 
       // --- BATCHING SETUP ---
       const batchMap = new Map<number, { path: string[], originalValue: string }>();
@@ -114,6 +115,8 @@ export class AwsApiService {
       // 2. RUN BATCH DECRYPTION (ONE REQUEST)
       const decryptedResults = await this.decryptBatchServerSide(batchValues);
 
+      console.error('--- DEBUG: STEP 2 decryptedResults output ---', decryptedResults);
+
       // 3. RECONSTRUCT THE FINAL DATA STRUCTURE
       const finalGroupData: GroupData = {};
       let decryptedIndex = 0;
@@ -147,6 +150,8 @@ export class AwsApiService {
           );
         }
       }
+
+      console.error('--- DEBUG: Step 3 finalGroupData output ---', finalGroupData);
 
       return finalGroupData;
     } catch (error) {
