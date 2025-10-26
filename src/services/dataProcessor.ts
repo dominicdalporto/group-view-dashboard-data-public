@@ -17,6 +17,7 @@ export interface ProcessedUserData {
 }
 
 export class DataProcessor {
+  
   /**
    * Utility to force a date string (YYYY-MM-DD) to be interpreted as
    * UTC midnight, preventing local time zone shifts.
@@ -62,8 +63,7 @@ export class DataProcessor {
       const dates: string[] = [];
       const ounces: number[] = [];
 
-      // Sort descending by date
-      // ✅ FIX: Use toUTCDate to get correct timestamps for sorting
+      // Sort descending by date (This part is correct)
       userDates.sort((a, b) => this.toUTCDate(b[0]).getTime() - this.toUTCDate(a[0]).getTime());
 
       userDates.forEach(([date, amount]) => {
@@ -124,26 +124,40 @@ export class DataProcessor {
 
   // Filter user data for recent N days
   static filterRecentDays(userData: ProcessedUserData[], days: number): ProcessedUserData[] {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - days);
+    
+    // --- UTC FIX APPLIED HERE ---
+    // 1. Get today's date
+    const today = new Date();
+    
+    // 2. Create a new date object representing midnight UTC of today
+    // This strips away the local time component (e.g., your PST time)
+    const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+
+    // 3. Set the cutoff date by subtracting days from the UTC date
+    // This ensures our cutoff is also at midnight UTC
+    const cutoff = new Date(todayUTC);
+    cutoff.setUTCDate(cutoff.getUTCDate() - (days - 1)); // -7 days to get 7 days of data *including* today
+    // --- END FIX ---
 
     return userData.map(user => {
       const indices: number[] = [];
       user.dates.forEach((dateStr, i) => {
-        // ✅ FIX: Use toUTCDate to compare against the local cutoff date correctly
+        // This comparison is now correct: UTC data date vs. UTC cutoff date
         if (this.toUTCDate(dateStr) >= cutoff) indices.push(i);
       });
+
+      const recentOunces = indices.map(i => user.ounces[i]);
 
       return {
         ...user,
         dates: indices.map(i => user.dates[i]),
-        ounces: indices.map(i => user.ounces[i]),
-        averageOunces: indices.length
-          ? indices.reduce((sum, i) => sum + user.ounces[i], 0) / indices.length
+        ounces: recentOunces,
+        averageOunces: recentOunces.length
+          ? recentOunces.reduce((sum, oz) => sum + oz, 0) / recentOunces.length
           : 0,
-        todayOunces: indices.length ? user.ounces[indices[0]] : 0,
-        threeDayOunces: indices.slice(0, 3).reduce((sum, i) => sum + user.ounces[i], 0),
-        sevenDayOunces: indices.slice(0, 7).reduce((sum, i) => sum + user.ounces[i], 0),
+        todayOunces: recentOunces[0] || 0, // Assumes [0] is today (based on previous sort)
+        threeDayOunces: recentOunces.slice(0, 3).reduce((sum, oz) => sum + oz, 0),
+        sevenDayOunces: recentOunces.slice(0, 7).reduce((sum, oz) => sum + oz, 0),
       };
     });
   }
@@ -155,18 +169,16 @@ export class DataProcessor {
     userData.forEach(user => {
       tables[user.custId] = user.dates
         .map((date, i) => {
-            // ✅ FIX: Use toUTCDate to create the Date object
+            // This part was already correct
             const dateObj = this.toUTCDate(date);
             
-            // Format back to YYYY-MM-DD using UTC methods to get the correct day
             const year = dateObj.getUTCFullYear();
-            const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0'); // month is 0-indexed
+            const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
             const day = String(dateObj.getUTCDate()).padStart(2, '0');
             const formattedDate = `${year}-${month}-${day}`;
             
             return { date: formattedDate, ounces: parseFloat(user.ounces[i].toFixed(1)) };
         })
-        // This sort is fine since the dates are now correct YYYY-MM-DD strings
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     });
 
