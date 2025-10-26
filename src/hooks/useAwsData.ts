@@ -113,7 +113,7 @@ export function useAwsData() {
           value: user.ounces[index],
         }))
         // Sort by UTC timestamp to prevent time zone shifts
-        .sort((a, b) => toUTCDate(b.date).getTime() - toUTCDate(a.date).getTime());
+        .sort((a, b) => toUTCDate(a.date).getTime() - toUTCDate(b.date).getTime());
   
         // Because the sort is now correct, the join/lastActive dates will be correct
         const joinDate = activityData[activityData.length - 1]?.date || new Date().toISOString().split("T")[0];
