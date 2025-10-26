@@ -17,10 +17,17 @@ export interface ProcessedUserData {
 }
 
 export class DataProcessor {
-  
-  // Utility to force date strings to be interpreted as UTC midnight
+  /**
+   * Utility to force a date string (YYYY-MM-DD) to be interpreted as
+   * UTC midnight, preventing local time zone shifts.
+   */
   private static toUTCDate(dateStr: string): Date {
-      return new Date(`${dateStr}T00:00:00.000Z`);
+    // Check if it's already a full ISO string (from a previous fix)
+    if (dateStr.includes('T')) {
+      return new Date(dateStr);
+    }
+    // Append UTC time to the date-only string
+    return new Date(`${dateStr}T00:00:00.000Z`);
   }
   
   // Convert group data into per-user daily data
@@ -55,7 +62,8 @@ export class DataProcessor {
       const dates: string[] = [];
       const ounces: number[] = [];
 
-      // Sort descending by date (FIXED: Use toUTCDate for accurate timestamp comparison)
+      // Sort descending by date
+      // ✅ FIX: Use toUTCDate to get correct timestamps for sorting
       userDates.sort((a, b) => this.toUTCDate(b[0]).getTime() - this.toUTCDate(a[0]).getTime());
 
       userDates.forEach(([date, amount]) => {
@@ -78,7 +86,7 @@ export class DataProcessor {
       else if (threeDayOunces < 120) hydrationStatus = 'mild dehydration';
       else hydrationStatus = 'hydrated';
 
-      // Nurse and room assignment (rest of the logic remains the same)
+      // Nurse and room assignment
       const nurseValue = nurses[custId];
       const nurse = Array.isArray(nurseValue)
         ? nurseValue[0] || 'Unassigned'
@@ -122,7 +130,7 @@ export class DataProcessor {
     return userData.map(user => {
       const indices: number[] = [];
       user.dates.forEach((dateStr, i) => {
-        // FIXED: Use toUTCDate for accurate comparison against local cutoff date
+        // ✅ FIX: Use toUTCDate to compare against the local cutoff date correctly
         if (this.toUTCDate(dateStr) >= cutoff) indices.push(i);
       });
 
@@ -147,17 +155,18 @@ export class DataProcessor {
     userData.forEach(user => {
       tables[user.custId] = user.dates
         .map((date, i) => {
-            // FIXED: Use toUTCDate for correct date object creation
+            // ✅ FIX: Use toUTCDate to create the Date object
             const dateObj = this.toUTCDate(date);
             
-            // Format the date using UTC methods to ensure the calendar day is correct
+            // Format back to YYYY-MM-DD using UTC methods to get the correct day
             const year = dateObj.getUTCFullYear();
-            const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+            const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0'); // month is 0-indexed
             const day = String(dateObj.getUTCDate()).padStart(2, '0');
             const formattedDate = `${year}-${month}-${day}`;
             
             return { date: formattedDate, ounces: parseFloat(user.ounces[i].toFixed(1)) };
         })
+        // This sort is fine since the dates are now correct YYYY-MM-DD strings
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     });
 
