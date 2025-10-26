@@ -160,15 +160,104 @@ export class AwsApiService {
   // -------------------------------
   // Other endpoints (remains the same)
   // -------------------------------
-  public async makeRequest<T>(params: Record<string, string>): Promise<T> { /* ... */ }
-  async getUserGroup(): Promise<string> { /* ... */ }
-  async getNurses(groupName: string): Promise<NursesData> { /* ... */ }
-  async getRooms(groupName: string): Promise<RoomsData> { /* ... */ }
-  async getNames(groupName: string): Promise<Record<string, string>> { /* ... */ }
-  async newCustID(): Promise<string> { /* ... */ }
-  async createUser(params: Record<string, string>): Promise<any> { /* ... */ }
-  async updateNurse(params: Record<string, string>): Promise<any> { /* ... */ }
-  async updateUserNurse(params: Record<string, string>): Promise<any> { /* ... */ }
+  public async makeRequest<T>(params: Record<string, string>): Promise<T> {
+    try {
+      const queryParams = new URLSearchParams(params).toString();
+      const url = `${this.baseUrl}?${queryParams}`;
+
+      // This is the call that initiates the request to your AWS endpoint
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        // Log the failure to the console
+        const errorText = await response.text();
+        console.error(`AWS API request failed: ${response.status} - ${errorText}`);
+        throw new Error(`API request failed with status ${response.status}`);
+      }
+
+      // Return the JSON response body
+      return response.json() as Promise<T>;
+    } catch (error) {
+      console.error("API request failed:", error);
+      toast.error("Failed to fetch data from API");
+      throw error;
+    }
+  }
+  async getUserGroup(): Promise<string> {
+    if (!this.userId) {
+      toast.error("User ID not set");
+      return "";
+    }
+
+    try {
+      const params = { Type: 'getusergroup', CustID: this.userId };
+      const response = await this.makeRequest<{ Groups: string[] }>(params);
+      return response.Groups[0] || "";
+    } catch (error) {
+      console.error("Failed to get user group:", error);
+      return "";
+    }
+  }
+  async getNurses(groupName: string): Promise<NursesData> {
+    try {
+      const params = { Type: 'getNurseByGroup', GroupName: groupName };
+      return await this.makeRequest<NursesData>(params);
+    } catch (error) {
+      console.error("Failed to get nurses:", error);
+      return {};
+    }
+  }
+  async getRooms(groupName: string): Promise<RoomsData> {
+    try {
+      const params = { Type: 'getRoomByGroup', GroupName: groupName };
+      return await this.makeRequest<RoomsData>(params);
+    } catch (error) {
+      console.error("Failed to get rooms:", error);
+      return {};
+    }
+  }
+  async getNames(groupName: string): Promise<Record<string, string>> {
+    try {
+      const params = { Type: 'getNamesByGroup', GroupName: groupName };
+      return await this.makeRequest<Record<string, string>>(params);
+    } catch (error) {
+      console.error("Failed to get names:", error);
+      return {};
+    }
+  }
+  async newCustID(): Promise<string> {
+    try {
+      const params = { Type: 'newcustid' };
+      return await this.makeRequest<string>(params);
+    } catch (error) {
+      console.error("Failed to get new customer ID:", error);
+      throw error;
+    }
+  }
+  async createUser(params: Record<string, string>): Promise<any> {
+    try {
+      return await this.makeRequest(params);
+    } catch (error) {
+      console.error("Failed to create user:", error);
+      throw error;
+    }
+  }
+  async updateNurse(params: Record<string, string>): Promise<any> {
+    try {
+      return await this.makeRequest(params);
+    } catch (error) {
+      console.error("Failed to update nurse:", error);
+      throw error;
+    }
+  }
+  async updateUserNurse(params: Record<string, string>): Promise<any> {
+    try {
+      return await this.makeRequest(params);
+    } catch (error) {
+      console.error("Failed to update user nurse:", error);
+      throw error;
+    }
+  }
 }
 
 // ✅ Initialize API service
