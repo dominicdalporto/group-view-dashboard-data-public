@@ -110,7 +110,7 @@ export function useAwsData() {
         // ✅ TIME ZONE FIX APPLIED HERE
         const activityData = user.dates.map((date, index) => ({
           date,
-          value: user.ounces[index],
+          value: parseFloat(user.ounces[index].toFixed(1)),
         }))
         // Sort by UTC timestamp to prevent time zone shifts
         .sort((a, b) => toUTCDate(a.date).getTime() - toUTCDate(b.date).getTime());
