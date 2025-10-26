@@ -73,12 +73,12 @@ export class DataProcessor {
 
       const validOunces = ounces.filter(oz => !isNaN(oz));
       const averageOunces = validOunces.length > 0
-        ? validOunces.reduce((sum, oz) => sum + oz, 0) / validOunces.length
+        ? parseFloat((validOunces.reduce((sum, oz) => sum + oz, 0) / validOunces.length).toFixed(1))
         : 0;
 
       const todayOunces = ounces[0] || 0;
-      const threeDayOunces = ounces.slice(0, 3).reduce((sum, oz) => sum + oz, 0);
-      const sevenDayOunces = ounces.slice(0, 7).reduce((sum, oz) => sum + oz, 0);
+      const threeDayOunces = parseFloat((ounces.slice(0, 3).reduce((sum, oz) => sum + oz, 0)).toFixed(1));
+      const sevenDayOunces = parseFloat((ounces.slice(0, 7).reduce((sum, oz) => sum + oz, 0)).toFixed(1));
       const daysOver60oz = ounces.filter(oz => oz >= 60).length;
 
       let hydrationStatus: 'hydrated' | 'mild dehydration' | 'dehydrated';
@@ -153,11 +153,11 @@ export class DataProcessor {
         dates: indices.map(i => user.dates[i]),
         ounces: recentOunces,
         averageOunces: recentOunces.length
-          ? recentOunces.reduce((sum, oz) => sum + oz, 0) / recentOunces.length
-          : 0,
-        todayOunces: recentOunces[0] || 0, // Assumes [0] is today (based on previous sort)
-        threeDayOunces: recentOunces.slice(0, 3).reduce((sum, oz) => sum + oz, 0),
-        sevenDayOunces: recentOunces.slice(0, 7).reduce((sum, oz) => sum + oz, 0),
+        ? parseFloat((recentOunces.reduce((sum, oz) => sum + oz, 0) / recentOunces.length).toFixed(1)) // ✅ FIX
+        : 0,
+      todayOunces: parseFloat((recentOunces[0] || 0).toFixed(1)), // ✅ FIX
+      threeDayOunces: parseFloat((recentOunces.slice(0, 3).reduce((sum, oz) => sum + oz, 0)).toFixed(1)), // ✅ FIX
+      sevenDayOunces: parseFloat((recentOunces.slice(0, 7).reduce((sum, oz) => sum + oz, 0)).toFixed(1)), // ✅ FIX
       };
     });
   }
